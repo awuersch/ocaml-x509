@@ -1,18 +1,18 @@
 open X509_common
 open X509_types
-open Asn
+open Asn.S
 
 let def  x = function None -> x | Some y -> y
 let def' x = fun y -> if y = x then None else Some y
 
 (* Error out on trailing bytes. *)
 let decode_strict codec cs =
-  match decode codec cs with
-  | Some (a, cs') when Cstruct.len cs' = 0 -> Some a
-  | _                                      -> None
+  match Asn.decode codec cs with
+  | Ok (a, cs') when Cstruct.len cs' = 0 -> Some a
+  | _                                    -> None
 
 let projections_of encoding asn =
-  let c = codec encoding asn in (decode_strict c, encode c)
+  let c = Asn.codec encoding asn in (decode_strict c, Asn.encode c)
 
 let compare_unordered_lists cmp l1 l2 =
   let rec loop = function
@@ -24,7 +24,8 @@ let compare_unordered_lists cmp l1 l2 =
   loop List.(sort cmp l1, sort cmp l2)
 
 let parse_error_oid msg oid =
-  parse_error @@ msg ^ ": " ^ OID.to_string oid
+  Asn.OID.pp Format.str_formatter oid;
+  parse_error "%s" @@ msg ^ ": " ^ Format.flush_str_formatter ()
 
 let (case_of, case_of_2) =
   let hash_of_assoc xs =
@@ -45,12 +46,14 @@ let (case_of, case_of_2) =
  * XXX Would be nicer if combinators could handle embedded structures.
  *)
 let project_exn asn =
-  let c = codec der asn in
+  let c = Asn.codec Asn.der asn in
   let dec cs =
-    let (res, cs') = decode_exn c cs in
-    if Cstruct.len cs' = 0 then res else parse_error "embed: leftovers"
+    match Asn.decode c cs with
+    | Ok (res, cs') ->
+        if Cstruct.len cs' = 0 then res else parse_error "embed: leftovers"
+    | Error err -> error err
   in
-  (dec, encode c)
+  (dec, Asn.encode c)
 
 
 let display_text =
@@ -140,7 +143,7 @@ module Name = struct
     rdn_sequence (* A vacuous choice, in the standard. *)
 
   let (name_of_cstruct, name_to_cstruct) =
-    projections_of der name
+    projections_of Asn.der name
 
   (* rfc5280 section 7.1. -- we're too strict on strings and should preserve the
    * order. *)
@@ -240,7 +243,7 @@ module Algorithm = struct
     (* pk algos *)
     (* any more? is the universe big enough? ramsey's theorem for pk cyphers? *)
     | RSA
-    | EC_pub of OID.t (* should translate the oid too *)
+    | EC_pub of Asn.OID.t (* should translate the oid too *)
 
     (* sig algos *)
     | MD2_RSA
@@ -689,9 +692,9 @@ module PK = struct
 
   (* For outside uses. *)
   let (rsa_private_of_cstruct, rsa_private_to_cstruct) =
-    projections_of der rsa_private_key
+    projections_of Asn.der rsa_private_key
   and (rsa_public_of_cstruct, rsa_public_to_cstruct) =
-    projections_of der rsa_public_key
+    projections_of Asn.der rsa_public_key
 
   (* ECs go here *)
   (* ... *)
@@ -714,7 +717,7 @@ module PK = struct
       (required ~label:"subjectPK" bit_string_cs)
 
   let (pub_info_of_cstruct, pub_info_to_cstruct) =
-    projections_of der pk_info_der
+    projections_of Asn.der pk_info_der
 
   (* PKCS8 *)
   let rsa_priv_of_cs, rsa_priv_to_cs = project_exn rsa_private_key
@@ -736,7 +739,7 @@ module PK = struct
          which are defined in X.501; but nobody seems to use them anyways *)
 
   let (private_of_cstruct, private_to_cstruct) =
-    projections_of der private_key_info
+    projections_of Asn.der private_key_info
 
 end
 
@@ -780,7 +783,7 @@ module CertificateRequest = struct
       (required ~label:"attributes" @@ implicit 0 (set_of attributes))
 
   let certificate_request_info_of_cs, certificate_request_info_to_cs =
-    projections_of der certificate_request_info
+    projections_of Asn.der certificate_request_info
 
   type certificate_request = {
     info : request_info ;
@@ -801,7 +804,7 @@ module CertificateRequest = struct
       (required ~label:"signature" bit_string_cs)
 
   let certificate_request_of_cs, certificate_request_to_cs =
-    projections_of der certificate_request
+    projections_of Asn.der certificate_request
 end
 
 (*
@@ -814,7 +817,7 @@ type tBSCertificate = {
   serial     : Z.t ;
   signature  : Algorithm.t ;
   issuer     : distinguished_name ;
-  validity   : Time.t * Time.t ;
+  validity   : Ptime.t * Ptime.t ;
   subject    : distinguished_name ;
   pk_info    : public_key ;
   issuer_id  : Cstruct.t option ;
@@ -840,7 +843,7 @@ let time =
   map
     (function `C1 t -> t | `C2 t -> t)
     (fun t ->
-       let year, _, _ = t.Time.date in
+       let year, _, _ = Ptime.to_date t in
        if year < 2050 then
          `C1 t
        else
@@ -892,7 +895,7 @@ let tBSCertificate =
    -@ (optional ~label:"extensions"    @@ explicit 3 Extension.extensions_der)
 
 let (tbs_certificate_of_cstruct, tbs_certificate_to_cstruct) =
-  projections_of der tBSCertificate
+  projections_of Asn.der tBSCertificate
 
 let certificate =
 
@@ -911,7 +914,7 @@ let certificate =
     (required ~label:"signatureValue"     bit_string_cs)
 
 let (certificate_of_cstruct, certificate_to_cstruct) =
-  projections_of der certificate
+  projections_of Asn.der certificate
 
 
 let pkcs1_digest_info =
@@ -928,7 +931,7 @@ let pkcs1_digest_info =
     (required ~label:"digest"          octet_string)
 
 let (pkcs1_digest_info_of_cstruct, pkcs1_digest_info_to_cstruct) =
-  projections_of der pkcs1_digest_info
+  projections_of Asn.der pkcs1_digest_info
 
 (* A bit of accessors for tree-diving. *)
 (*

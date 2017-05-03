@@ -186,9 +186,7 @@ let validate_time time { asn = cert ; _ } =
   | None     -> true
   | Some now ->
     let (not_before, not_after) = cert.tbs_cert.validity in
-    let (t1, t2) =
-      Asn.Time.(to_posix_time not_before, to_posix_time not_after) in
-    t1 <= now && now <= t2
+    not_before <= now && now <= not_after
 
 let version_matches_extensions { asn = cert ; _ } =
   let tbs = cert.tbs_cert in
@@ -331,11 +329,17 @@ module Validation = struct
   let expired c now =
     let now = match now with
       | None -> "none"
-      | Some t -> string_of_float t
+      | Some t -> match Ptime.of_float_s t with
+                  | None -> "none"
+                  | Some t -> (Ptime.to_rfc3339 t)
     and fr, un = c.asn.tbs_cert.validity
-    and f t = string_of_float (Asn.Time.to_posix_time t)
+    and f = Ptime.to_rfc3339
     in
     ("(valid from " ^ f fr ^ " until " ^ f un ^ ")", now)
+
+  let opt_ptime_to_float_s = function
+    | None -> None
+    | Some t -> Some (Ptime.to_float_s t)
 
   type ca_error = [
     | `CAIssuerSubjectMismatch of t
@@ -479,7 +483,7 @@ module Validation = struct
       validate_ca_extensions cert
     with
     | (true, true, true) -> success
-    | (false, _, _)      -> fail (`IntermediateCertificateExpired (cert, now))
+    | (false, _, _)      -> fail (`IntermediateCertificateExpired (cert, opt_ptime_to_float_s now))
     | (_, false, _)      -> fail (`IntermediateInvalidVersion cert)
     | (_, _, false)      -> fail (`IntermediateInvalidExtensions cert)
 
@@ -495,7 +499,7 @@ module Validation = struct
     | (false, _, _, _, _)            -> fail (`CAIssuerSubjectMismatch cert)
     | (_, false, _, _, _)            -> fail (`CAInvalidVersion cert)
     | (_, _, false, _, _)            -> fail (`CAInvalidSelfSignature cert)
-    | (_, _, _, false, _)            -> fail (`CACertificateExpired (cert, now))
+    | (_, _, _, false, _)            -> fail (`CACertificateExpired (cert, opt_ptime_to_float_s now))
     | (_, _, _, _, false)            -> fail (`CAInvalidExtensions cert)
 
   let valid_ca ?time cacert =
@@ -511,7 +515,7 @@ module Validation = struct
       validate_server_extensions cert
     with
     | (true, true, true, true) -> success
-    | (false, _, _, _)         -> fail (`LeafCertificateExpired (cert, now))
+    | (false, _, _, _)         -> fail (`LeafCertificateExpired (cert, opt_ptime_to_float_s now))
     | (_, false, _, _)         -> fail (`LeafInvalidName (cert, host))
     | (_, _, false, _)         -> fail (`LeafInvalidVersion cert)
     | (_, _, _, false)         -> fail (`LeafInvalidExtensions cert)
@@ -627,7 +631,7 @@ module Validation = struct
       let res =
         match validate_time time server, maybe_validate_hostname server host with
         | true , true  -> verify_fingerprint server fingerprints
-        | false, _     -> fail (`Leaf (`LeafCertificateExpired (server, time)))
+        | false, _     -> fail (`Leaf (`LeafCertificateExpired (server, opt_ptime_to_float_s time)))
         | _    , false -> fail (`Leaf (`LeafInvalidName (server, host)))
       in
       lower res

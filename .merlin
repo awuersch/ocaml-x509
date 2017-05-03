@@ -6,5 +6,6 @@ PKG cstruct
 PKG sexplib
 PKG nocrypto
 PKG asn1-combinators
+PKG ptime
 PKG oUnit
 PKG astring
