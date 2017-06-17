@@ -200,6 +200,8 @@ module Extension : sig
     | `Ipsec_user
     | `Time_stamping
     | `Ocsp_signing
+    | `Pkinit_client_auth
+    | `Pkinit_kdc
     | `Other of Asn.OID.t
   ]
 
@@ -210,13 +212,19 @@ module Extension : sig
       extendedKeyUsage extension. *)
   val supports_extended_usage : ?not_present:bool -> t -> extended_key_usage -> bool
 
+  (** Supports strings and Kerberos pkinit principal names *)
+  type general_name_other_value = [
+    | `String of string
+    | `Krb5_principal_name of string * string list
+  ]
+
   (** A list of [general_name]s is the value of both
       {{:https://tools.ietf.org/html/rfc5280#section-4.2.1.6}subjectAltName}
       and
       {{:https://tools.ietf.org/html/rfc5280#section-4.2.1.7}IssuerAltName}
       extension. *)
   type general_name = [
-    | `Other         of (Asn.OID.t * string)
+    | `Other         of (Asn.OID.t * general_name_other_value)
     | `Rfc_822       of string
     | `DNS           of string
     | `X400_address  of unit

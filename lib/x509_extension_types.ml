@@ -21,11 +21,18 @@ type extended_key_usage = [
   | `Ipsec_user
   | `Time_stamping
   | `Ocsp_signing
+  | `Pkinit_kdc
+  | `Pkinit_client_auth
   | `Other of Asn.OID.t
 ]
 
+type general_name_other_value = [
+  | `String of string
+  | `Krb5_principal_name of string * string list
+]
+
 type general_name = [
-  | `Other         of (Asn.OID.t * string)
+  | `Other         of (Asn.OID.t * general_name_other_value)
   | `Rfc_822       of string
   | `DNS           of string
   | `X400_address  of unit

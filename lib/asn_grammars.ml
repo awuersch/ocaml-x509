@@ -152,6 +152,21 @@ module Name = struct
 end
 
 module General_name = struct
+  module ID = Registry.Cert_extn
+
+  let krb5_principal_name =
+    let f (s, (_, l)) = (s, l)
+    and g (s, l) = (s, (Z.of_int 1, l)) in
+    map f g @@
+    sequence @@
+       (required ~label:"realm" @@ explicit 0 general_string)
+    -@ (required ~label:"principalName" @@
+         explicit 1
+           (sequence @@
+               (required ~label:"name_type" @@ explicit 0 integer)
+            -@ (required ~label:"name_string" @@
+                  explicit 1
+                    (sequence_of general_string))))
 
   (* GeneralName is also pretty pervasive. *)
 
@@ -162,21 +177,23 @@ module General_name = struct
   let another_name =
     let open Registry in
     let f = function
-      | (oid, `C1 n) -> (oid, n)
-      | (oid, `C2 n) -> (oid, n)
-      | (oid, `C3 _) -> (oid, "")
+      | (oid, `C1 s) -> (oid, `String s)
+      | (oid, `C2 s) -> (oid, `String s)
+      | (oid, `C3 n) -> (oid, `Krb5_principal_name n)
+      | (oid, `C4 _) -> (oid, `String "")
     and g = function
-      | (oid, "") -> (oid, `C3 ())
-      | (oid, n ) when Name_extn.is_utf8_id oid -> (oid, `C1 n)
-      | (oid, n ) -> (oid, `C2 n) in
+      | (oid, `String "") -> (oid, `C4 ())
+      | (oid, `Krb5_principal_name n ) -> (oid, `C3 n)
+      | (oid, `String s ) when Name_extn.is_utf8_id oid -> (oid, `C1 s)
+      | (oid, `String s ) -> (oid, `C2 s) in
     map f g @@
     sequence2
       (required ~label:"type-id" oid)
       (required ~label:"value" @@
         explicit 0
-          (choice3 utf8_string ia5_string null))
+          (choice4 utf8_string ia5_string krb5_principal_name null))
 
-  and or_address = null (* Horrible crap, need to fill it. *)
+  and or_address = null (* Horrible crap, need to kill it. *)
 
   let edi_party_name =
     sequence2
@@ -449,30 +466,34 @@ module Extension = struct
     let open ID.Extended_usage in
 
     let f = case_of [
-      (any              , `Any             ) ;
-      (server_auth      , `Server_auth     ) ;
-      (client_auth      , `Client_auth     ) ;
-      (code_signing     , `Code_signing    ) ;
-      (email_protection , `Email_protection) ;
-      (ipsec_end_system , `Ipsec_end       ) ;
-      (ipsec_tunnel     , `Ipsec_tunnel    ) ;
-      (ipsec_user       , `Ipsec_user      ) ;
-      (time_stamping    , `Time_stamping   ) ;
-      (ocsp_signing     , `Ocsp_signing    ) ]
+      (any                , `Any               ) ;
+      (server_auth        , `Server_auth       ) ;
+      (client_auth        , `Client_auth       ) ;
+      (code_signing       , `Code_signing      ) ;
+      (email_protection   , `Email_protection  ) ;
+      (ipsec_end_system   , `Ipsec_end         ) ;
+      (ipsec_tunnel       , `Ipsec_tunnel      ) ;
+      (ipsec_user         , `Ipsec_user        ) ;
+      (time_stamping      , `Time_stamping     ) ;
+      (ocsp_signing       , `Ocsp_signing      ) ;
+      (pkinit_kdc         , `Pkinit_kdc        ) ;
+      (pkinit_client_auth , `Pkinit_client_auth) ]
       ~default:(fun oid -> `Other oid)
 
     and g = function
-      | `Any              -> any
-      | `Server_auth      -> server_auth
-      | `Client_auth      -> client_auth
-      | `Code_signing     -> code_signing
-      | `Email_protection -> email_protection
-      | `Ipsec_end        -> ipsec_end_system
-      | `Ipsec_tunnel     -> ipsec_tunnel
-      | `Ipsec_user       -> ipsec_user
-      | `Time_stamping    -> time_stamping
-      | `Ocsp_signing     -> ocsp_signing
-      | `Other oid        -> oid
+      | `Any                -> any
+      | `Server_auth        -> server_auth
+      | `Client_auth        -> client_auth
+      | `Code_signing       -> code_signing
+      | `Email_protection   -> email_protection
+      | `Ipsec_end          -> ipsec_end_system
+      | `Ipsec_tunnel       -> ipsec_tunnel
+      | `Ipsec_user         -> ipsec_user
+      | `Time_stamping      -> time_stamping
+      | `Ocsp_signing       -> ocsp_signing
+      | `Pkinit_kdc         -> pkinit_kdc
+      | `Pkinit_client_auth -> pkinit_client_auth
+      | `Other oid          -> oid
     in
     map (List.map f) (List.map g) @@ sequence_of oid
 
@@ -565,7 +586,6 @@ module Extension = struct
         sequence2
           (required ~label:"policyIdentifier" oid)
           (optional ~label:"policyQualifiers" (sequence_of qualifier_info))
-
 
   let gen_names_of_cs, gen_names_to_cs       = project_exn gen_names
   and auth_key_id_of_cs, auth_key_id_to_cs   = project_exn authority_key_id

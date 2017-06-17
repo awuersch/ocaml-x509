@@ -18,6 +18,8 @@ let us_govt   = base 2 16 <| 840 <| 1 <| 101
 let nist_alg  = us_govt <| 3 <| 4
 let hash_algs = nist_alg <| 2
 
+let krb5 = base 1 3 <| 6 <| 1 <| 5 <| 2
+
 (* PKCS1 *)
 
 let md2  = rsadsi <| 2 <| 2
@@ -224,17 +226,20 @@ module Cert_extn = struct
   and inhibit_any_policy            = ce <| 54
 
   module Extended_usage = struct
-    let any              = extended_key_usage <| 0
-    let key_purpose      = pkix <| 3
-    let server_auth      = key_purpose <| 1
-    and client_auth      = key_purpose <| 2
-    and code_signing     = key_purpose <| 3
-    and email_protection = key_purpose <| 4
-    and ipsec_end_system = key_purpose <| 5
-    and ipsec_tunnel     = key_purpose <| 6
-    and ipsec_user       = key_purpose <| 7
-    and time_stamping    = key_purpose <| 8
-    and ocsp_signing     = key_purpose <| 9
+    let any                = extended_key_usage <| 0
+    let key_purpose        = pkix <| 3
+    let pkinit             = krb5 <| 3
+    let server_auth        = key_purpose <| 1
+    and client_auth        = key_purpose <| 2
+    and code_signing       = key_purpose <| 3
+    and email_protection   = key_purpose <| 4
+    and ipsec_end_system   = key_purpose <| 5
+    and ipsec_tunnel       = key_purpose <| 6
+    and ipsec_user         = key_purpose <| 7
+    and time_stamping      = key_purpose <| 8
+    and ocsp_signing       = key_purpose <| 9
+    and pkinit_kdc         = pkinit <| 4
+    and pkinit_client_auth = pkinit <| 5
   end
 
   module Cert_policy = struct
@@ -243,6 +248,10 @@ module Cert_extn = struct
     let unotice = qt <| 2
 
     let any_policy = certificate_policies_2 <| 0
+  end
+
+  module Other = struct
+    let pkinit_san = krb5 <| 2
   end
 end
 
