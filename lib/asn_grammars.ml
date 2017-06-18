@@ -176,14 +176,16 @@ module General_name = struct
    * *)
   let another_name =
     let open Registry in
+    let pkinit_san = Cert_extn.Other.pkinit_san in
     let f = function
       | (oid, `C1 s) -> (oid, `String s)
       | (oid, `C2 s) -> (oid, `String s)
-      | (oid, `C3 n) -> (oid, `Krb5_principal_name n)
+      | (oid, `C3 n) when oid == pkinit_san -> (oid, `Krb5_principal_name n)
+      | (oid, `C3 n) -> parse_error "OID not expected pkinit_san"
       | (oid, `C4 _) -> (oid, `String "")
     and g = function
       | (oid, `String "") -> (oid, `C4 ())
-      | (oid, `Krb5_principal_name n ) -> (oid, `C3 n)
+      | (_, `Krb5_principal_name n ) -> (pkinit_san, `C3 n)
       | (oid, `String s ) when Name_extn.is_utf8_id oid -> (oid, `C1 s)
       | (oid, `String s ) -> (oid, `C2 s) in
     map f g @@

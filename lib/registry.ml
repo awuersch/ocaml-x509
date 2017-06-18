@@ -238,8 +238,8 @@ module Cert_extn = struct
     and ipsec_user         = key_purpose <| 7
     and time_stamping      = key_purpose <| 8
     and ocsp_signing       = key_purpose <| 9
-    and pkinit_kdc         = pkinit <| 4
-    and pkinit_client_auth = pkinit <| 5
+    and pkinit_client_auth = pkinit <| 4
+    and pkinit_kdc         = pkinit <| 5
   end
 
   module Cert_policy = struct
